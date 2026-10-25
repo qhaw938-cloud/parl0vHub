@@ -1,4 +1,4 @@
--- Matcha.lua | AUTO-ESP WITH COUNTER
+-- Matcha.lua | RED AUTO-ESP VERSION
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
@@ -17,23 +17,27 @@ local state = { alive = true, espItems = {}, count = 0, gui = nil, label = nil }
 local function safe(fn) local ok, res = pcall(fn) return ok and res or nil end
 local function destroyIfExists(instance) if instance then safe(function() instance:Destroy() end) end end
 
--- إنشاء عداد صغير للتأكد من العمل
+-- إنشاء عداد الحالة باللون الأحمر
 local function createStatusGui()
-    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
     destroyIfExists(state.gui)
     local gui = Instance.new("ScreenGui")
-    gui.Name = "MatchaStatus"
+    gui.Name = "MatchaRedStatus"
+    gui.ResetOnSpawn = false
     gui.Parent = playerGui
     state.gui = gui
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 200, 0, 30)
-    label.Position = UDim2.new(0, 10, 0, 10)
+    label.Size = UDim2.new(0, 220, 0, 35)
+    label.Position = UDim2.new(0, 15, 0, 15)
     label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    label.BackgroundTransparency = 0.5
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextSize = 14
+    label.BackgroundTransparency = 0.4
+    label.TextColor3 = Color3.fromRGB(255, 0, 0)
+    label.TextSize = 16
     label.Font = Enum.Font.GothamBold
-    label.Text = "Matcha: Scanning... (0 found)"
+    label.Text = "Matcha: Scanning... (0)"
+    label.BorderSizePixel = 2
+    label.BorderColor3 = Color3.fromRGB(255, 0, 0)
     label.Parent = gui
     state.label = label
 end
@@ -43,18 +47,23 @@ local function applyEsp(obj, name)
     local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj)
     if not part then return end
     local h = Instance.new("Highlight")
-    h.FillColor = Color3.fromRGB(255, 215, 0)
+    h.FillColor = Color3.fromRGB(255, 0, 0)
+    h.OutlineColor = Color3.fromRGB(255, 255, 255)
+    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     h.Parent = obj
     local b = Instance.new("BillboardGui")
-    b.Size = UDim2.new(0, 150, 0, 40)
+    b.Size = UDim2.new(0, 180, 0, 45)
+    b.StudsOffset = Vector3.new(0, 4, 0)
     b.AlwaysOnTop = true
     b.Parent = part
     local t = Instance.new("TextLabel")
     t.Size = UDim2.fromScale(1, 1)
     t.BackgroundTransparency = 1
     t.Text = name
-    t.TextColor3 = Color3.fromRGB(255, 255, 255)
+    t.TextColor3 = Color3.fromRGB(255, 0, 0)
+    t.TextStrokeTransparency = 0
     t.TextScaled = true
+    t.Font = Enum.Font.GothamBold
     t.Parent = b
     state.espItems[obj] = {h = h, b = b}
 end
@@ -73,7 +82,16 @@ local function scan()
         end
     end
     state.count = foundCount
-    if state.label then state.label.Text = "Matcha: Searching... (" .. tostring(foundCount) .. " found)" end
+    if state.label then 
+        state.label.Text = "Matcha: Searching... (" .. tostring(foundCount) .. ")" 
+        if foundCount > 0 then
+            state.label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            state.label.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        else
+            state.label.TextColor3 = Color3.fromRGB(255, 0, 0)
+            state.label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        end
+    end
     for oldObj, items in pairs(state.espItems) do
         if not currentFound[oldObj] or not oldObj.Parent then
             destroyIfExists(items.h)
