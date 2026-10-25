@@ -1,19 +1,17 @@
--- Matcha.lua | RED AUTO-ESP VERSION (Updated Targets)
+-- Matcha.lua | ULTIMATE RED ESP (Tracers + Highlights + Auto)
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
 end
  
 local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
 local targetNames = {
     ["أبو الضبان"] = true, ["أسطورة البر"] = true, ["الضب الألماسي"] = true,
     ["الضب الأزرق النادر"] = true, ["ضب التبر"] = true, ["ضب الكهرمان"] = true,
     ["ضب الياقوت"] = true, ["ضب البتر النادر"] = true, ["ضب الجلمود"] = true,
     ["ضب الحمى"] = true, ["الضب الفيروزي"] = true, ["الضب الصحراوي العادي"] = true,
-    ["الضب الأخضر"] = true,
-    ["ضب الحزم"] = true,  -- جديد
-    ["ضب الشيح"] = true,  -- جديد
-    ["ضب الغبار"] = true, -- جديد
+    ["الضب الأخضر"] = true, ["ضب الحزم"] = true, ["ضب الشيح"] = true, ["ضب الغبار"] = true,
 }
  
 local state = { alive = true, espItems = {}, count = 0, gui = nil, label = nil }
@@ -33,7 +31,7 @@ local function createStatusGui()
     label.Size = UDim2.new(0, 220, 0, 35)
     label.Position = UDim2.new(0, 15, 0, 15)
     label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    label.BackgroundTransparency = 0.4
+    label.BackgroundTransparency = 0.5
     label.TextColor3 = Color3.fromRGB(255, 0, 0)
     label.TextSize = 16
     label.Font = Enum.Font.GothamBold
@@ -50,12 +48,10 @@ local function applyEsp(obj, name)
     if not part then return end
     local h = Instance.new("Highlight")
     h.FillColor = Color3.fromRGB(255, 0, 0)
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     h.Parent = obj
     local b = Instance.new("BillboardGui")
-    b.Size = UDim2.new(0, 180, 0, 45)
-    b.StudsOffset = Vector3.new(0, 4, 0)
+    b.Size = UDim2.new(0, 150, 0, 40)
     b.AlwaysOnTop = true
     b.Parent = part
     local t = Instance.new("TextLabel")
@@ -63,11 +59,32 @@ local function applyEsp(obj, name)
     t.BackgroundTransparency = 1
     t.Text = name
     t.TextColor3 = Color3.fromRGB(255, 0, 0)
-    t.TextStrokeTransparency = 0
     t.TextScaled = true
     t.Font = Enum.Font.GothamBold
     t.Parent = b
-    state.espItems[obj] = {h = h, b = b}
+    local line = nil
+    if type(Drawing) ~= "nil" and Drawing.new then
+        line = Drawing.new("Line")
+        line.Color = Color3.fromRGB(255, 0, 0)
+        line.Thickness = 1.5
+        line.Visible = false
+    end
+    state.espItems[obj] = {h = h, b = b, line = line, part = part}
+end
+
+local function updateTracers()
+    for obj, items in pairs(state.espItems) do
+        if items.line and items.part then
+            local pos, onScreen = Camera:WorldToViewportPoint(items.part.Position)
+            if onScreen then
+                items.line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                items.line.To = Vector2.new(pos.X, pos.Y)
+                items.line.Visible = true
+            else
+                items.line.Visible = false
+            end
+        end
+    end
 end
  
 local function scan()
@@ -86,18 +103,13 @@ local function scan()
     state.count = foundCount
     if state.label then 
         state.label.Text = "Matcha: Searching... (" .. tostring(foundCount) .. ")" 
-        if foundCount > 0 then
-            state.label.TextColor3 = Color3.fromRGB(255, 255, 255)
-            state.label.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-        else
-            state.label.TextColor3 = Color3.fromRGB(255, 0, 0)
-            state.label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        end
+        state.label.BackgroundColor3 = foundCount > 0 and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
     end
     for oldObj, items in pairs(state.espItems) do
         if not currentFound[oldObj] or not oldObj.Parent then
             destroyIfExists(items.h)
             destroyIfExists(items.b)
+            if items.line then items.line:Remove() end
             state.espItems[oldObj] = nil
         end
     end
@@ -106,12 +118,9 @@ end
 env.parl0vHubCleanup = function() 
     state.alive = false 
     destroyIfExists(state.gui)
+    for _, items in pairs(state.espItems) do if items.line then items.line:Remove() end end
 end
  
 safe(createStatusGui)
-task.spawn(function()
-    while state.alive do
-        scan()
-        task.wait(2)
-    end
-end)
+task.spawn(function() while state.alive do scan() task.wait(2) end end)
+game:GetService("RunService").RenderStepped:Connect(function() if state.alive then updateTracers() end end)
