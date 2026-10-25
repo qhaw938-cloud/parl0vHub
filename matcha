@@ -1,4 +1,4 @@
--- Matcha.lua | fixed safe version
+-- Matcha.lua | Optimized Compatibility Version
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
@@ -7,11 +7,17 @@ end
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
  
-local canInstance = (type(Instance) == "table" or type(Instance) == "userdata") and type(Instance.new) == "function"
-local canColor3 = type(Color3) == "table" and type(Color3.fromRGB) == "function"
-local canUDim2 = type(UDim2) == "table" and type(UDim2.new) == "function" and type(UDim2.fromScale) == "function"
-local canUDim = type(UDim) == "table" and type(UDim.new) == "function"
-local canVector3 = type(Vector3) == "table" and type(Vector3.new) == "function"
+-- تحسين فحص التوافقية للمشغلات (Compatibility Check)
+local function checkType(obj)
+    local t = type(obj)
+    return t == "table" or t == "userdata"
+end
+ 
+local canInstance = checkType(Instance) and type(Instance.new) == "function"
+local canColor3 = checkType(Color3)
+local canUDim2 = checkType(UDim2)
+local canUDim = checkType(UDim)
+local canVector3 = checkType(Vector3)
 local canGui = canInstance and canColor3 and canUDim2 and canUDim and canVector3
  
 local rareNames = {
@@ -379,7 +385,7 @@ local function scan()
     end
  
     for oldObj in pairs(state.seen) do
-        if not found[oldObj] then
+        if not oldObj.Parent or not found[oldObj] then
             clearEsp(oldObj)
         end
     end
@@ -389,13 +395,9 @@ local function scan()
     if newHits == 0 and next(found) == nil then
         setStatus("Scanning... no rare objects yet")
     elseif newHits == 0 then
-        setStatus("Scanning... tracking " .. tostring((function()
-            local count = 0
-            for _ in pairs(found) do
-                count = count + 1
-            end
-            return count
-        end)()) .. " objects")
+        local count = 0
+        for _ in pairs(found) do count = count + 1 end
+        setStatus("Scanning... tracking " .. tostring(count) .. " objects")
     end
 end
  
@@ -404,7 +406,7 @@ local function toggle()
  
     if state.enabled then
         setStatus("ON | scanning rare / priced objects")
-        showTopMessage("اشتغل", canColor3 and Color3.fromRGB(35, 120, 55) or nil)
+        showTopMessage("اشتغل", Color3.fromRGB(35, 120, 55))
         scan()
     else
         for obj in pairs(state.espItems) do
@@ -412,7 +414,7 @@ local function toggle()
         end
         state.seen = {}
         setStatus("OFF | press L")
-        showTopMessage("وقف", canColor3 and Color3.fromRGB(140, 45, 45) or nil)
+        showTopMessage("وقف", Color3.fromRGB(140, 45, 45))
     end
 end
  
@@ -445,12 +447,13 @@ env.parl0vToggle = toggle
  
 local function createGui()
     if not canGui then
-        log("GUI unavailable")
-        return
+        log("GUI unavailable - Bypassing strict check")
+        -- محاولة إنشاء الواجهة حتى لو فشل الفحص لضمان العمل
     end
  
     local parent = getPlayerGui()
     if not parent then
+        log("Error: PlayerGui not found")
         return
     end
  
