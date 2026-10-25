@@ -1,243 +1,79 @@
--- Matcha.lua | FINAL FIX VERSION
+-- Matcha.lua | AUTO-ESP VERSION (No Button Required)
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
 end
  
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
  
-local rareNames = {
-    ["أبو الضبان"] = true, ["ضب التبر"] = true, ["الضب الألماسي"] = true,
-    ["أسطورة البر"] = true, ["الضب العملاق الأسطوري"] = true, ["ضب الياقوت"] = true,
-    ["ضب الزمرد"] = true, ["ضب الكهرمان"] = true, ["ضب الفيروز"] = true,
-    ["ضب المعادن"] = true, ["الضب النجمي"] = true, ["الضب الأزرق النادر"] = true,
-    ["الضب البنفسجي المشع"] = true, ["ضب الميثيك الأرجواني"] = true, ["الضب الناري"] = true,
-    ["ضب الفانوس"] = true, ["الضب المشع"] = true, ["الضب الكريستالي"] = true,
-    ["ضب الكهوف النادر"] = true, ["ضب الحجر النادر"] = true, ["الضب النادر"] = true,
-    ["الضب الأزرق"] = true, ["الضب الوردي"] = true, ["الضب السريع"] = true,
-    ["الضب المخفي"] = true, ["الضب الصخري"] = true,
+-- قائمة الضبان المطلوبة
+local targetNames = {
+    ["أبو الضبان"] = true, ["أسطورة البر"] = true, ["الضب الألماسي"] = true,
+    ["الضب الأزرق النادر"] = true, ["ضب التبر"] = true, ["ضب الكهرمان"] = true,
+    ["ضب الياقوت"] = true, ["ضب البتر النادر"] = true, ["ضب الجلمود"] = true,
+    ["ضب الحمى"] = true, ["الضب الفيروزي"] = true, ["الضب الصحراوي العادي"] = true,
+    ["الضب الأخضر"] = true,
 }
  
-local state = {
-    enabled = false, alive = true, seen = {}, conns = {}, priceMin = 100000,
-    scanNames = true, scanPrices = true, alerts = true, esp = true,
-    gui = nil, labels = {}, espItems = {}, noticeGui = nil,
-}
- 
-local function log(msg) print("[Matcha] " .. tostring(msg)) end
+local state = { alive = true, espItems = {} }
 local function safe(fn) local ok, res = pcall(fn) return ok and res or nil end
- 
-local function getPlayerGui()
-    local player = Players.LocalPlayer
-    return player and (player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui", 5))
-end
- 
 local function destroyIfExists(instance) if instance then safe(function() instance:Destroy() end) end end
  
-local function showTopMessage(text, bgColor)
-    local playerGui = safe(getPlayerGui)
-    if not playerGui then log(text) return end
-    destroyIfExists(state.noticeGui)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MatchaTopNotice"
-    gui.ResetOnSpawn = false
-    gui.Parent = playerGui
-    state.noticeGui = gui
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 240, 0, 42)
-    frame.Position = UDim2.new(0.5, -120, 0, 18)
-    frame.BackgroundColor3 = bgColor or Color3.fromRGB(35, 120, 55)
-    frame.BorderSizePixel = 0
-    frame.Parent = gui
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = frame
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.fromScale(1, 1)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.TextScaled = true
-    label.Font = Enum.Font.GothamBold
-    label.Parent = frame
-    task.spawn(function() task.wait(2.5) destroyIfExists(gui) end)
-end
- 
-local function setStatus(message)
-    log(message)
-    if state.labels.status then safe(function() state.labels.status.Text = message end) end
-end
- 
-local function matchName(text)
-    if type(text) ~= "string" then return false end
-    for rareName in pairs(rareNames) do if string.find(text, rareName, 1, true) then return true end end
-    return false
-end
- 
-local function numeric(value)
-    if type(value) == "number" then return value end
-    if type(value) ~= "string" then return nil end
-    local cleaned = value:gsub("[,%s٬]", "")
-    local number = tonumber(cleaned:match("%d+%.?%d*"))
-    if not number then return nil end
-    if value:match("[Kk]") or value:find("ألف", 1, true) then number = number * 1000 end
-    if value:match("[Mm]") or value:find("مليون", 1, true) then number = number * 1000000 end
-    return number
-end
- 
-local function getPrice(obj)
-    local priceKeys = {"Price", "SellPrice", "SellValue", "Worth", "Value", "السعر", "القيمة"}
-    for _, key in ipairs(priceKeys) do
-        local attr = safe(function() return obj:GetAttribute(key) end)
-        local num = numeric(attr)
-        if num then return num end
-        local child = safe(function() return obj:FindFirstChild(key) end)
-        if child then
-            local val = safe(function() return child.Value end)
-            num = numeric(val)
-            if num then return num end
-            local txt = safe(function() return child.Text end)
-            num = numeric(txt)
-            if num then return num end
-        end
-    end
-    return nil
-end
- 
-local function getMarkerPart(obj)
-    if obj:IsA("Model") then return obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart") end
-    if obj:IsA("BasePart") then return obj end
-    return nil
-end
- 
-local function clearEsp(obj)
-    local esp = state.espItems[obj]
-    if not esp then return end
-    destroyIfExists(esp.highlight)
-    destroyIfExists(esp.billboard)
-    state.espItems[obj] = nil
-end
- 
-local function applyEsp(obj, labelText)
-    if not state.esp or state.espItems[obj] then return end
-    local part = getMarkerPart(obj)
+local function applyEsp(obj, name)
+    if state.espItems[obj] then return end
+    local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj)
     if not part then return end
+ 
+    -- توهج ذهبي
     local highlight = Instance.new("Highlight")
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.FillColor = Color3.fromRGB(255, 215, 0)
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     highlight.Parent = obj
+ 
+    -- اسم فوق الضب
     local billboard = Instance.new("BillboardGui")
-    billboard.Size = UDim2.new(0, 180, 0, 40)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 4, 0)
     billboard.AlwaysOnTop = true
     billboard.Parent = part
     local text = Instance.new("TextLabel")
     text.Size = UDim2.fromScale(1, 1)
     text.BackgroundTransparency = 1
+    text.Text = name
+    text.TextColor3 = Color3.fromRGB(255, 255, 255)
     text.TextScaled = true
-    text.TextColor3 = Color3.fromRGB(255, 230, 80)
-    text.Text = labelText
+    text.Font = Enum.Font.GothamBold
     text.Parent = billboard
-    state.espItems[obj] = {highlight = highlight, billboard = billboard}
+ 
+    state.espItems[obj] = {h = highlight, b = billboard}
 end
  
 local function scan()
-    if not state.enabled then return end
-    local objects = safe(function() return workspace:GetDescendants() end)
-    if not objects then return end
-    local found = {}
-    for _, obj in ipairs(objects) do
+    local descendants = safe(function() return workspace:GetDescendants() end)
+    if not descendants then return end
+    local currentFound = {}
+    for _, obj in ipairs(descendants) do
         local objName = safe(function() return obj.Name end)
-        if type(objName) == "string" and obj.Parent then
-            local named = state.scanNames and matchName(objName)
-            local price = state.scanPrices and getPrice(obj)
-            if named or (price and price >= state.priceMin) then
-                found[obj] = true
-                local labelText = price and (objName .. " | " .. tostring(price)) or objName
-                applyEsp(obj, labelText)
-                if not state.seen[obj] then
-                    if state.alerts then setStatus("Found: " .. labelText) end
-                end
-            end
+        if type(objName) == "string" and targetNames[objName] then
+            currentFound[obj] = true
+            applyEsp(obj, objName)
         end
     end
-    for oldObj in pairs(state.seen) do if not found[oldObj] then clearEsp(oldObj) end end
-    state.seen = found
-end
- 
-local function toggle()
-    state.enabled = not state.enabled
-    if state.enabled then
-        setStatus("ON | scanning...")
-        showTopMessage("اشتغل", Color3.fromRGB(35, 120, 55))
-        scan()
-    else
-        for obj in pairs(state.espItems) do clearEsp(obj) end
-        state.seen = {}
-        setStatus("OFF | press L")
-        showTopMessage("وقف", Color3.fromRGB(140, 45, 45))
+    for oldObj, items in pairs(state.espItems) do
+        if not currentFound[oldObj] or not oldObj.Parent then
+            destroyIfExists(items.h)
+            destroyIfExists(items.b)
+            state.espItems[oldObj] = nil
+        end
     end
 end
  
-local function cleanup()
-    state.alive = false
-    state.enabled = false
-    for _, conn in ipairs(state.conns) do safe(function() conn:Disconnect() end) end
-    for obj in pairs(state.espItems) do clearEsp(obj) end
-    destroyIfExists(state.gui)
-    destroyIfExists(state.noticeGui)
-    log("Unloaded")
-end
+env.parl0vHubCleanup = function() state.alive = false end
  
-env.parl0vHubCleanup = cleanup
-env.parl0vToggle = toggle
- 
-local function createGui()
-    local parent = getPlayerGui()
-    if not parent then log("PlayerGui not found") return end
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MatchaMenu"
-    gui.ResetOnSpawn = false
-    gui.Parent = parent
-    state.gui = gui
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 270, 0, 90)
-    frame.Position = UDim2.new(0, 15, 0.5, -45)
-    frame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-    frame.BackgroundTransparency = 0.15
-    frame.Parent = gui
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = frame
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -12, 0, 26)
-    title.Position = UDim2.new(0, 6, 0, 6)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.fromRGB(255, 230, 80)
-    title.Text = "Matcha Scanner"
-    title.Parent = frame
-    local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -12, 0, 24)
-    status.Position = UDim2.new(0, 6, 0, 34)
-    status.BackgroundTransparency = 1
-    status.TextColor3 = Color3.fromRGB(230, 230, 230)
-    status.Text = "OFF | press L"
-    status.Parent = frame
-    state.labels.status = status
-end
- 
-safe(createGui)
-local inputConn = safe(function()
-    return UserInputService.InputBegan:Connect(function(input, processed)
-        if not processed and input.KeyCode == Enum.KeyCode.L then toggle() end
-    end)
-end)
-if inputConn then table.insert(state.conns, inputConn) end
 task.spawn(function()
+    print("[Matcha] ESP Started Automatically")
     while state.alive do
-        task.wait(3)
-        if state.enabled then scan() end
+        scan()
+        task.wait(2)
     end
 end)
-setStatus("OFF | press L")
