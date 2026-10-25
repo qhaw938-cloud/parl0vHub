@@ -27,13 +27,13 @@ local function refresh()
         end)
     end
 end
-local function start()
+local function start(l)
     if not alive then return end
     active = true
     refresh()
     log('START: rare-name scanner enabled (not auto-hunt).')
 end
-local function stop()
+local function stop(l)
     active = false
     refresh()
     log('STOP: rare-name scanner paused.')
