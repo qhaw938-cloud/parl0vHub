@@ -1,12 +1,10 @@
--- Matcha.lua | AUTO-ESP VERSION (No Button Required)
+-- Matcha.lua | AUTO-ESP WITH COUNTER
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
 end
  
 local Players = game:GetService("Players")
- 
--- قائمة الضبان المطلوبة
 local targetNames = {
     ["أبو الضبان"] = true, ["أسطورة البر"] = true, ["الضب الألماسي"] = true,
     ["الضب الأزرق النادر"] = true, ["ضب التبر"] = true, ["ضب الكهرمان"] = true,
@@ -15,50 +13,67 @@ local targetNames = {
     ["الضب الأخضر"] = true,
 }
  
-local state = { alive = true, espItems = {} }
+local state = { alive = true, espItems = {}, count = 0, gui = nil, label = nil }
 local function safe(fn) local ok, res = pcall(fn) return ok and res or nil end
 local function destroyIfExists(instance) if instance then safe(function() instance:Destroy() end) end end
- 
+
+-- إنشاء عداد صغير للتأكد من العمل
+local function createStatusGui()
+    local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+    destroyIfExists(state.gui)
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "MatchaStatus"
+    gui.Parent = playerGui
+    state.gui = gui
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0, 200, 0, 30)
+    label.Position = UDim2.new(0, 10, 0, 10)
+    label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    label.BackgroundTransparency = 0.5
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 14
+    label.Font = Enum.Font.GothamBold
+    label.Text = "Matcha: Scanning... (0 found)"
+    label.Parent = gui
+    state.label = label
+end
+
 local function applyEsp(obj, name)
     if state.espItems[obj] then return end
     local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj)
     if not part then return end
- 
-    -- توهج ذهبي
-    local highlight = Instance.new("Highlight")
-    highlight.FillColor = Color3.fromRGB(255, 215, 0)
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = obj
- 
-    -- اسم فوق الضب
-    local billboard = Instance.new("BillboardGui")
-    billboard.Size = UDim2.new(0, 200, 0, 50)
-    billboard.StudsOffset = Vector3.new(0, 4, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Parent = part
-    local text = Instance.new("TextLabel")
-    text.Size = UDim2.fromScale(1, 1)
-    text.BackgroundTransparency = 1
-    text.Text = name
-    text.TextColor3 = Color3.fromRGB(255, 255, 255)
-    text.TextScaled = true
-    text.Font = Enum.Font.GothamBold
-    text.Parent = billboard
- 
-    state.espItems[obj] = {h = highlight, b = billboard}
+    local h = Instance.new("Highlight")
+    h.FillColor = Color3.fromRGB(255, 215, 0)
+    h.Parent = obj
+    local b = Instance.new("BillboardGui")
+    b.Size = UDim2.new(0, 150, 0, 40)
+    b.AlwaysOnTop = true
+    b.Parent = part
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.fromScale(1, 1)
+    t.BackgroundTransparency = 1
+    t.Text = name
+    t.TextColor3 = Color3.fromRGB(255, 255, 255)
+    t.TextScaled = true
+    t.Parent = b
+    state.espItems[obj] = {h = h, b = b}
 end
  
 local function scan()
     local descendants = safe(function() return workspace:GetDescendants() end)
     if not descendants then return end
     local currentFound = {}
+    local foundCount = 0
     for _, obj in ipairs(descendants) do
         local objName = safe(function() return obj.Name end)
         if type(objName) == "string" and targetNames[objName] then
             currentFound[obj] = true
+            foundCount = foundCount + 1
             applyEsp(obj, objName)
         end
     end
+    state.count = foundCount
+    if state.label then state.label.Text = "Matcha: Searching... (" .. tostring(foundCount) .. " found)" end
     for oldObj, items in pairs(state.espItems) do
         if not currentFound[oldObj] or not oldObj.Parent then
             destroyIfExists(items.h)
@@ -68,10 +83,13 @@ local function scan()
     end
 end
  
-env.parl0vHubCleanup = function() state.alive = false end
+env.parl0vHubCleanup = function() 
+    state.alive = false 
+    destroyIfExists(state.gui)
+end
  
+safe(createStatusGui)
 task.spawn(function()
-    print("[Matcha] ESP Started Automatically")
     while state.alive do
         scan()
         task.wait(2)
