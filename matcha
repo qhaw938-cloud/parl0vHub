@@ -1,4 +1,4 @@
--- Matcha.lua | RED AUTO-ESP VERSION
+-- Matcha.lua | RED AUTO-ESP VERSION (Updated Targets)
 local env = (type(getgenv) == "function" and getgenv()) or _G
 if type(env.parl0vHubCleanup) == "function" then
     pcall(env.parl0vHubCleanup)
@@ -11,13 +11,15 @@ local targetNames = {
     ["ضب الياقوت"] = true, ["ضب البتر النادر"] = true, ["ضب الجلمود"] = true,
     ["ضب الحمى"] = true, ["الضب الفيروزي"] = true, ["الضب الصحراوي العادي"] = true,
     ["الضب الأخضر"] = true,
+    ["ضب الحزم"] = true,  -- جديد
+    ["ضب الشيح"] = true,  -- جديد
+    ["ضب الغبار"] = true, -- جديد
 }
  
 local state = { alive = true, espItems = {}, count = 0, gui = nil, label = nil }
 local function safe(fn) local ok, res = pcall(fn) return ok and res or nil end
 local function destroyIfExists(instance) if instance then safe(function() instance:Destroy() end) end end
 
--- إنشاء عداد الحالة باللون الأحمر
 local function createStatusGui()
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
