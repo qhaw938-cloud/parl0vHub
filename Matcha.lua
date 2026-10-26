@@ -1,395 +1,340 @@
+--[[
+    Matcha Hub ESP | Dhab Hunt + Deira Locator
+    Game: PlaceId 82347957379349 (Dhab Hunting)
+    
+    Features:
+    - Auto-run on inject (No GUI buttons required)
+    - Dhab ESP: Highlights, Billboard (Name/Dist), Red Tracers
+    - Deira Locator: Glowing Beacon, Edge Arrow, Distance HUD
+    - Optimized for Matcha Executor
+    
+    Controls:
+    - F2: Toggle Dhab/NPC ESP
+    - F3: Toggle Deira Beacon
+]]
 
--- Matcha | ULTIMATE RED ESP
--- English Names | 15000 Studs | Tracers
--- F = Enable | L = Disable
-
-local env = (type(getgenv) == "function" and getgenv()) or _G
-
-if type(env.parl0vHubCleanup) == "function" then
-    pcall(env.parl0vHubCleanup)
-end
-
-local Players = game:GetService("Players")
+--=========================================================
+--  SERVICES & CONSTANTS
+--=========================================================
+local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local Workspace  = game:GetService("Workspace")
+local StarterGui = game:GetService("StarterGui")
+local UIS        = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local MAX_DISTANCE = 15000
-local SCAN_INTERVAL = 3
-local RED = Color3.fromRGB(255, 0, 0)
+local LocalPlayer = Players.LocalPlayer
+local Camera      = Workspace.CurrentCamera
 
--- Arabic internal names -> English display names
-local names = {
-    ["أبو الضبان"] = "Abu Al-Dhabban",
-    ["أسطورة البر"] = "Desert Legend",
-    ["الضب الألماسي"] = "Diamond Dhab",
-    ["الضب الأزرق النادر"] = "Rare Blue Dhab",
-    ["ضب التبر"] = "Gold Dhab",
-    ["ضب الكهرمان"] = "Amber Dhab",
-    ["ضب الياقوت"] = "Ruby Dhab",
-    ["ضب البتر النادر"] = "Rare Batr Dhab",
-    ["ضب الجلمود"] = "Boulder Dhab",
-    ["ضب الحمى"] = "Fever Dhab",
-    ["الضب الفيروزي"] = "Turquoise Dhab",
-    ["الضب الصحراوي العادي"] = "Common Desert Dhab",
-    ["الضب الأخضر"] = "Green Dhab",
-    ["ضب الحزم"] = "Hazm Dhab",
-    ["ضب الشيح"] = "Wormwood Dhab",
-    ["ضب الغبار"] = "Dust Dhab",
-    ["ضب الأرطى"] = "Arta Dhab",
-
-    ["الضب النادر"] = "Rare Dhab",
-    ["الضب الأزرق"] = "Blue Dhab",
-    ["الضب الوردي"] = "Pink Dhab",
-    ["الضب السريع"] = "Speed Dhab",
-    ["الضب المخفي"] = "Hidden Dhab",
-    ["الضب الصخري"] = "Rock Dhab",
-    ["ضب الزمرد"] = "Emerald Dhab",
-    ["الضب العملاق الأسطوري"] = "Legendary Giant Dhab",
-    ["الضب النجمي"] = "Star Dhab",
-    ["الضب البنفسجي المشع"] = "Radioactive Purple Dhab",
-    ["الضب الناري"] = "Fire Dhab",
-    ["ضب الفانوس"] = "Lantern Dhab",
-    ["الضب المشع"] = "Radioactive Dhab",
-    ["الضب الكريستالي"] = "Crystal Dhab",
-    ["ضب الكهوف النادر"] = "Rare Cave Dhab",
-    ["ضب الحجر النادر"] = "Rare Stone Dhab"
-}
-
-local state = {
-    alive = true,
-    enabled = true,
-    items = {},
-    connections = {},
-    gui = nil,
-    status = nil
-}
-
-local function getRoot()
-    local character = player.Character
-    return character and character:FindFirstChild("HumanoidRootPart")
-end
-
-local function getPart(obj)
-    if obj:IsA("BasePart") then
-        return obj
-    end
-
-    if obj:IsA("Model") then
-        return obj.PrimaryPart
-            or obj:FindFirstChildWhichIsA("BasePart", true)
-    end
-
-    return nil
-end
-
-local function getEnglishName(name)
-    if names[name] then
-        return names[name]
-    end
-
-    local lower = string.lower(name)
-
-    if string.find(lower, "dhab", 1, true)
-        or string.find(lower, "dhabb", 1, true)
-        or string.find(lower, "lizard", 1, true)
-        or string.find(lower, "ضب", 1, true) then
-
-        if string.find(lower, "ضب", 1, true) then
-            return "Unknown Dhab"
-        end
-
-        return name
-    end
-
-    return nil
-end
-
-local function removeItem(obj)
-    local item = state.items[obj]
-    if not item then return end
-
-    if item.highlight then
-        item.highlight:Destroy()
-    end
-
-    if item.billboard then
-        item.billboard:Destroy()
-    end
-
-    if item.line then
-        pcall(function()
-            item.line:Remove()
-        end)
-    end
-
-    state.items[obj] = nil
-end
-
-local function createGui()
-    local playerGui = player:WaitForChild("PlayerGui")
-
-    local old = playerGui:FindFirstChild("MatchaStatusUI")
-    if old then old:Destroy() end
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "MatchaStatusUI"
-    gui.ResetOnSpawn = false
-    gui.Parent = playerGui
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.fromOffset(280, 55)
-    label.Position = UDim2.fromOffset(15, 15)
-    label.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-    label.BackgroundTransparency = 0.2
-    label.BorderColor3 = RED
-    label.BorderSizePixel = 2
-    label.TextColor3 = RED
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 15
-    label.Text = "MATCHA ESP | ON\nScanning..."
-    label.Parent = gui
-
-    state.gui = gui
-    state.status = label
-end
-
-local function addItem(obj, englishName)
-    if state.items[obj] then return end
-
-    local part = getPart(obj)
-    if not part then return end
-
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "MatchaRedHighlight"
-    highlight.Adornee = obj
-    highlight.FillColor = RED
-    highlight.OutlineColor = RED
-    highlight.FillTransparency = 0.45
-    highlight.OutlineTransparency = 0
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Parent = state.gui
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "MatchaESPLabel"
-    billboard.Adornee = part
-    billboard.Size = UDim2.fromOffset(200, 55)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
-    billboard.AlwaysOnTop = true
-    billboard.MaxDistance = MAX_DISTANCE
-    billboard.Parent = state.gui
-
-    local text = Instance.new("TextLabel")
-    text.Size = UDim2.fromScale(1, 1)
-    text.BackgroundTransparency = 1
-    text.TextColor3 = RED
-    text.TextStrokeColor3 = Color3.new(0, 0, 0)
-    text.TextStrokeTransparency = 0
-    text.TextScaled = true
-    text.Font = Enum.Font.GothamBold
-    text.Text = englishName
-    text.Parent = billboard
-
-    local line = nil
-
-    if type(Drawing) == "table"
-        and type(Drawing.new) == "function" then
-
-        local ok, result = pcall(function()
-            return Drawing.new("Line")
-        end)
-
-        if ok then
-            line = result
-            line.Color = RED
-            line.Thickness = 2
-            line.Visible = false
-        end
-    end
-
-    state.items[obj] = {
-        part = part,
-        highlight = highlight,
-        billboard = billboard,
-        text = text,
-        line = line,
-        name = englishName
+--=========================================================
+--  CONFIG
+--=========================================================
+local Config = {
+    -- Dhab Hunt ESP
+    Dhab = {
+        Enabled          = true,
+        ShowNPCs         = true,
+        ShowPlayers      = false,
+        TeamCheck        = true,
+        ShowHighlight    = true,
+        ShowName         = true,
+        ShowDistance     = true,
+        ShowTracers      = true,
+        MaxDistance      = 5000,
+        ScanInterval     = 0.5,
+        TracerOriginY    = 0.92,
+        Color            = Color3.fromRGB(255, 0, 0),
+        HighlightFill    = Color3.fromRGB(255, 0, 0),
+        TextColor        = Color3.fromRGB(255, 70, 70),
+        TracerColor      = Color3.fromRGB(255, 0, 0),
+        ToggleKey        = Enum.KeyCode.F2,
+    },
+    
+    -- Deira Locator
+    Deira = {
+        Keywords         = { "ديره", "دير", "deira", "town", "village", "base", "home" },
+        ShowBeam         = true,
+        ShowHighlight    = true,
+        ShowHUD          = true,
+        ShowEdgeArrow    = true,
+        BeamHeight       = 400,
+        BeamSize         = 5,
+        Color            = Color3.fromRGB(255, 0, 0),
+        ScanInterval     = 1,
+        ToggleKey        = Enum.KeyCode.F3,
     }
+}
+
+--=========================================================
+--  UTILITY
+--=========================================================
+local function notify(title, msg)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = msg,
+            Duration = 5
+        })
+    end)
 end
 
-local function scan()
-    if not state.enabled then return end
+local function getRoot(model)
+    return model:FindFirstChild("HumanoidRootPart") 
+        or model:FindFirstChild("UpperTorso") 
+        or model:FindFirstChild("Torso") 
+        or model.PrimaryPart
+end
 
-    local root = getRoot()
+local function isAlive(model)
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+--=========================================================
+--  DHAB HUNT ESP LOGIC
+--=========================================================
+local dhabEspData = {} -- [model] = { visuals }
+
+local function clearDhabVisuals(model)
+    local data = dhabEspData[model]
+    if not data then return end
+    if data.highlight then data.highlight:Destroy() end
+    if data.billboard then data.billboard:Destroy() end
+    if data.tracer then data.tracer:Remove() end
+    dhabEspData[model] = nil
+end
+
+local function createDhabVisuals(model)
+    if dhabEspData[model] then return end
+    local root = getRoot(model)
     if not root then return end
 
-    local found = {}
+    local data = {}
+    if Config.Dhab.ShowHighlight then
+        local hl = Instance.new("Highlight")
+        hl.FillColor = Config.Dhab.HighlightFill
+        hl.OutlineColor = Config.Dhab.Color
+        hl.FillTransparency = 0.55
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent = model
+        data.highlight = hl
+    end
 
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if not state.alive or not state.enabled then
-            return
+    if Config.Dhab.ShowName or Config.Dhab.ShowDistance then
+        local bb = Instance.new("BillboardGui", root)
+        bb.Name = "Matcha_BB"
+        bb.Size = UDim2.new(0, 160, 0, 42)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
+        bb.AlwaysOnTop = true
+        
+        local lbl = Instance.new("TextLabel", bb)
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 14
+        lbl.TextColor3 = Config.Dhab.TextColor
+        lbl.TextStrokeTransparency = 0
+        lbl.Text = model.Name
+        data.billboard = bb
+        data.label = lbl
+    end
+
+    if Config.Dhab.ShowTracers and Drawing then
+        local t = Drawing.new("Line")
+        t.Thickness = 1.5
+        t.Color = Config.Dhab.TracerColor
+        t.Transparency = 0.8
+        t.Visible = false
+        data.tracer = t
+    end
+
+    dhabEspData[model] = data
+end
+
+local function scanDhab()
+    local seen = {}
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj ~= LocalPlayer.Character and isAlive(obj) and getRoot(obj) then
+            local player = Players:GetPlayerFromCharacter(obj)
+            local valid = false
+            if player then
+                if Config.Dhab.ShowPlayers and not (Config.Dhab.TeamCheck and player.Team == LocalPlayer.Team) then
+                    valid = true
+                end
+            elseif Config.Dhab.ShowNPCs then
+                valid = true
+            end
+            
+            if valid then
+                seen[obj] = true
+                createDhabVisuals(obj)
+            end
         end
+    end
+    for model in pairs(dhabEspData) do
+        if not seen[model] or not model.Parent or not isAlive(model) then
+            clearDhabVisuals(model)
+        end
+    end
+end
 
-        if obj:IsA("Model") or obj:IsA("BasePart") then
-            local englishName = getEnglishName(obj.Name)
+--=========================================================
+--  DEIRA LOCATOR LOGIC
+--=========================================================
+local deiraTarget = nil
+local deiraBeam   = nil
+local deiraHL     = nil
+local hudGui, hudLabel, arrow
 
-            if englishName then
-                local part = getPart(obj)
+local function buildDeiraHUD()
+    if hudGui then return end
+    hudGui = Instance.new("ScreenGui", (gethui and gethui()) or LocalPlayer:WaitForChild("PlayerGui"))
+    hudGui.Name = "DeiraHUD"
+    hudGui.ResetOnSpawn = false
+    hudGui.IgnoreGuiInset = true
+    
+    hudLabel = Instance.new("TextLabel", hudGui)
+    hudLabel.AnchorPoint = Vector2.new(0.5, 0)
+    hudLabel.Position = UDim2.new(0.5, 0, 0, 15)
+    hudLabel.Size = UDim2.new(0, 300, 0, 35)
+    hudLabel.BackgroundTransparency = 0.5
+    hudLabel.BackgroundColor3 = Color3.new(0, 0, 0)
+    hudLabel.TextColor3 = Color3.new(1, 0, 0)
+    hudLabel.Font = Enum.Font.GothamBold
+    hudLabel.TextSize = 16
+    hudLabel.Visible = false
+    
+    arrow = Instance.new("TextLabel", hudGui)
+    arrow.Size = UDim2.new(0, 40, 0, 40)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "➤"
+    arrow.TextColor3 = Color3.new(1, 0, 0)
+    arrow.TextSize = 35
+    arrow.Visible = false
+end
 
-                if part then
-                    local distance =
-                        (root.Position - part.Position).Magnitude
+local function scanDeira()
+    local best = nil
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if (obj:IsA("BasePart") or obj:IsA("Model")) and obj.Parent then
+            local name = obj.Name:lower()
+            for _, kw in ipairs(Config.Deira.Keywords) do
+                if name:find(kw:lower(), 1, true) then
+                    best = obj
+                    break
+                end
+            end
+        end
+        if best then break end
+    end
+    
+    if best ~= deiraTarget then
+        if deiraBeam then deiraBeam:Destroy() deiraBeam = nil end
+        if deiraHL then deiraHL:Destroy() deiraHL = nil end
+        deiraTarget = best
+        if deiraTarget and Config.Deira.ShowHighlight then
+            deiraHL = Instance.new("Highlight", deiraTarget)
+            deiraHL.FillColor = Config.Deira.Color
+            deiraHL.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end
+    end
+end
 
-                    if distance <= MAX_DISTANCE then
-                        found[obj] = true
-                        addItem(obj, englishName)
+--=========================================================
+--  CORE LOOPS
+--=========================================================
+task.spawn(function()
+    while task.wait(Config.Dhab.ScanInterval) do pcall(scanDhab) end
+end)
+
+task.spawn(function()
+    while task.wait(Config.Deira.ScanInterval) do pcall(scanDeira) end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local cam = Workspace.CurrentCamera
+    local viewport = cam.ViewportSize
+    local myRoot = LocalPlayer.Character and getRoot(LocalPlayer.Character)
+    
+    -- Dhab Update
+    if Config.Dhab.Enabled then
+        for model, data in pairs(dhabEspData) do
+            local root = getRoot(model)
+            if root then
+                local dist = myRoot and (myRoot.Position - root.Position).Magnitude or 0
+                local inRange = dist <= Config.Dhab.MaxDistance
+                if data.billboard then 
+                    data.billboard.Enabled = inRange
+                    if data.label then data.label.Text = string.format("%s [%d]", model.Name, math.floor(dist)) end
+                end
+                if data.highlight then data.highlight.Enabled = inRange end
+                if data.tracer then
+                    local screenPos, onScreen = cam:WorldToViewportPoint(root.Position)
+                    if inRange and onScreen then
+                        data.tracer.From = Vector2.new(viewport.X / 2, viewport.Y * Config.Dhab.TracerOriginY)
+                        data.tracer.To = Vector2.new(screenPos.X, screenPos.Y)
+                        data.tracer.Visible = true
+                    else
+                        data.tracer.Visible = false
                     end
                 end
             end
         end
     end
 
-    for obj in pairs(state.items) do
-        if not found[obj] or not obj:IsDescendantOf(workspace) then
-            removeItem(obj)
-        end
-    end
-end
-
-local function update()
-    if not state.enabled then return end
-
-    local root = getRoot()
-    local camera = workspace.CurrentCamera
-
-    if not root or not camera then return end
-
-    local count = 0
-
-    for obj, item in pairs(state.items) do
-        local part = item.part
-
-        if not part or not part:IsDescendantOf(workspace) then
-            removeItem(obj)
-        else
-            local distance =
-                (root.Position - part.Position).Magnitude
-
-            local visible = distance <= MAX_DISTANCE
-
-            item.highlight.Enabled = visible
-            item.billboard.Enabled = visible
-
-            if visible then
-                count = count + 1
-
-                item.text.Text = string.format(
-                    "%s\n[%d studs]",
-                    item.name,
-                    math.floor(distance)
-                )
+    -- Deira Update
+    if deiraTarget and deiraTarget.Parent then
+        local pos = (deiraTarget:IsA("BasePart") and deiraTarget.Position) or deiraTarget:GetPivot().Position
+        local dist = myRoot and (myRoot.Position - pos).Magnitude or 0
+        
+        -- Beam
+        if Config.Deira.ShowBeam then
+            if not deiraBeam then
+                deiraBeam = Instance.new("Part", Workspace)
+                deiraBeam.Anchored = true; deiraBeam.CanCollide = false; deiraBeam.Transparency = 0.5
+                deiraBeam.Material = Enum.Material.Neon; deiraBeam.Color = Config.Deira.Color
+                deiraBeam.Size = Vector3.new(Config.Deira.BeamSize, Config.Deira.BeamHeight, Config.Deira.BeamSize)
             end
-
-            if item.line then
-                local pos, onScreen =
-                    camera:WorldToViewportPoint(part.Position)
-
-                item.line.Visible =
-                    visible and onScreen and pos.Z > 0
-
-                if item.line.Visible then
-                    item.line.From = Vector2.new(
-                        camera.ViewportSize.X / 2,
-                        camera.ViewportSize.Y
-                    )
-
-                    item.line.To = Vector2.new(pos.X, pos.Y)
-                end
+            deiraBeam.Position = pos + Vector3.new(0, Config.Deira.BeamHeight/2, 0)
+        end
+        
+        -- HUD & Arrow
+        if Config.Deira.ShowHUD and hudLabel then
+            hudLabel.Visible = true
+            hudLabel.Text = string.format("DEIRA: %d studs", math.floor(dist))
+        end
+        
+        if Config.Deira.ShowEdgeArrow and arrow then
+            local screenPos, onScreen = cam:WorldToViewportPoint(pos)
+            if onScreen then
+                arrow.Visible = true
+                arrow.Position = UDim2.fromOffset(screenPos.X, screenPos.Y)
+                arrow.Rotation = 90
+            else
+                local center = Vector2.new(viewport.X/2, viewport.Y/2)
+                local dir = (Vector2.new(screenPos.X, screenPos.Y) - center).Unit
+                if screenPos.Z < 0 then dir = -dir end
+                local radius = math.min(viewport.X, viewport.Y) / 2 - 50
+                arrow.Visible = true
+                arrow.Position = UDim2.fromOffset(center.X + dir.X * radius, center.Y + dir.Y * radius)
+                arrow.Rotation = math.deg(math.atan2(dir.Y, dir.X))
             end
         end
-    end
-
-    if state.status then
-        state.status.Text = string.format(
-            "MATCHA ESP | ON\nFound: %d | Range: 15000",
-            count
-        )
-    end
-end
-
-local function setEnabled(value)
-    state.enabled = value
-
-    if not value then
-        for obj in pairs(state.items) do
-            removeItem(obj)
-        end
-
-        if state.status then
-            state.status.Text = "MATCHA ESP | OFF\nPress F to enable"
-        end
-    else
-        if state.status then
-            state.status.Text = "MATCHA ESP | ON\nScanning..."
-        end
-
-        task.spawn(scan)
-    end
-end
-
-local function cleanup()
-    if not state.alive then return end
-
-    state.alive = false
-    state.enabled = false
-
-    for _, connection in ipairs(state.connections) do
-        connection:Disconnect()
-    end
-
-    for obj in pairs(state.items) do
-        removeItem(obj)
-    end
-
-    if state.gui then
-        state.gui:Destroy()
-    end
-end
-
-env.parl0vHubCleanup = cleanup
-
-createGui()
-
-table.insert(
-    state.connections,
-    RunService.RenderStepped:Connect(update)
-)
-
-table.insert(
-    state.connections,
-    UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then return end
-
-        if input.KeyCode == Enum.KeyCode.F then
-            setEnabled(true)
-        elseif input.KeyCode == Enum.KeyCode.L then
-            setEnabled(false)
-        end
-    end)
-)
-
-task.spawn(function()
-    while state.alive do
-        if state.enabled then
-            local ok, err = pcall(scan)
-
-            if not ok then
-                warn("[Matcha ESP] Scan error:", err)
-            end
-        end
-
-        task.wait(SCAN_INTERVAL)
     end
 end)
 
-print("[Matcha] ESP Loaded | F = ON | L = OFF")
+--=========================================================
+--  INPUT
+--=========================================================
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Config.Dhab.ToggleKey then
+        Config.Dhab.Enabled = not Config.Dhab.Enabled
+        notify("Dhab ESP", Config.Dhab.Enabled and "Enabled" or "Disabled")
+    elseif input.KeyCode == Config.Deira.ToggleKey then
+        Config.Deira.ShowBeam = not Config.Deira.ShowBeam
+        notify("Deira Beacon", Config.Deira.ShowBeam and "Enabled" or "Disabled")
+    end
+end)
+
+buildDeiraHUD()
+notify("Matcha Hub", "Loaded! F2: Dhab ESP | F3: Deira Beacon")
